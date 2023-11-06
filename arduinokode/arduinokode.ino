@@ -2,29 +2,29 @@
 #include <WiFiNINA.h>
 #include <Arduino_MKRIoTCarrier.h>
 #include "arduino_secrets.h"
-//#include <RTCZero.h>
+#include <ArduinoJson.h>
 #include <WiFiUdp.h>
 #include <NTPClient.h>
-#include <TimeLib.h> // Include the TimeLib library
+#include <TimeLib.h>
 
 //RTCZero rtc;
 WiFiUDP ntpUDP;
 NTPClient timeClient(ntpUDP);
-///////please enter your sensitive data in the Secret tab/arduino_secrets.h
-char ssid[] = SECRET_SSID;    // your network SSID (name)
-char pass[] = SECRET_PASS;    // your network password (use for WPA, or use as key for WEP)
+
+char ssid[] = SECRET_SSID;    
+char pass[] = SECRET_PASS;    
 char user[] = MQTT_USER;
 char user_pass[] = MQTT_PASS;
 int digitalPin = 0;   // KY-037 digital interface
 int analogPin = A5;   // KY-037 analog interface
-int ledPin = 13;      // Arduino LED pin
+//int ledPin = 13;      // Arduino LED pin
 int digitalVal;       // digital readings
 int analogVal;     
 
 WiFiSSLClient wifiClient;
 MqttClient mqttClient(wifiClient);
 
-const char broker[] = "6f22b3baab2b42cdbb9a22efb15eccbc.s2.eu.hivemq.cloud";
+const char broker[] = "0c318c3035dc4ef7996dc6d40bbc80b5.s2.eu.hivemq.cloud";
 int        port     = 8883;
 const char topic[]  = "Christians arduino";
 
@@ -39,6 +39,7 @@ String formattedDate = "";
 String dateTime = "";
 
 int status = WL_IDLE_STATUS;
+StaticJsonDocument<300> data;
 
 
 int GMT = 1; //gmt +1
@@ -59,7 +60,6 @@ void setup() {
     while (true);
 
   }
-
   // attempt to connect to WiFi network:
   Serial.print("Attempting to connect to WPA SSID: ");
   Serial.println(ssid);
@@ -76,7 +76,10 @@ void setup() {
   timeClient.begin();
   // Set time offset to your local timezone in seconds
   timeClient.setTimeOffset(3600);
-
+  /*String formattedTime = timeClient.getFormattedTime().substring(0, 5); // Get the formatted time string and keep only the hours and minutes
+  
+  String formattedDate = String(day()) + "." + String(month()) + "." + String(year()); // Get the formatted date string using the TimeLib functions
+  dateTime = formattedDate + " " + formattedTime;*/
   // Each client must have a unique client ID
   mqttClient.setId("ArduinoChr");
   // You can provide a username and password for authentication
@@ -105,16 +108,15 @@ void maaler(){
 
 void printTime() {
   timeClient.update();
-  
+  //String formattedTime = "";
+  //String formattedDate = "";
   if (timeClient.getSeconds() == 0) { // Check if a full minute has been reached
     formattedTime = timeClient.getFormattedTime().substring(0, 5); // Get the formatted time string and keep only the hours and minutes
 
     setTime(timeClient.getEpochTime()); // Set the internal time using the epoch time from the NTP client
     formattedDate = String(day()) + "." + String(month()) + "." + String(year()); // Get the formatted date string using the TimeLib functions
   }
-  dateTime = formattedDate + " " + formattedTime;
-  //Serial.println(formattedTime); 
-  //Serial.println(formattedDate); 
+  
 
   delay(1000);
 }
@@ -126,18 +128,9 @@ void print2digits(int number) {
   Serial.print(number);
 }
 
-void mqttbesked(int lyd, String tid){
+void mqttbesked(StaticJsonDocument<300> nydata){
   mqttClient.beginMessage(topic);
-  mqttClient.print("{ ");
-  mqttClient.println("  lydmaaling: ");
-  mqttClient.print(lyd);
-  mqttClient.print(",");
-  mqttClient.println("  tidspunkt: ");
-  mqttClient.print(tid);
-  mqttClient.print(",");
-  mqttClient.println("  placering: ");
-  mqttClient.print("Christian");
-  mqttClient.println("}");
+  serializeJsonPretty(data, mqttClient);
   mqttClient.endMessage();
 }
 
@@ -150,12 +143,23 @@ void printWiFiStatus() {
 }
 
 void loop() {
+  JsonArray maalinger = data.createNestedArray("lydmaaling");
+  maalinger.add(analogVal);
+  data["id"] = count;
+  dateTime = formattedDate+" "+formattedTime;
+  data["tidspunkt"] = dateTime;
+  Serial.println(); 
+  Serial.println(formattedTime); 
+  Serial.println(formattedDate); 
+  Serial.println(dateTime); 
+  data["placering"] = "Christian";
+  Serial.println(); 
   mqttClient.poll();
-  Serial.println(dateTime);
+  serializeJsonPretty(data, Serial);
   unsigned long currentMillis = millis();
   
   maaler();
   printTime();
-  mqttbesked(analogVal, dateTime);
+  mqttbesked(data);
   count++;
 }
