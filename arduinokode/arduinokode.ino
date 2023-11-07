@@ -27,6 +27,7 @@ MqttClient mqttClient(wifiClient);
 const char broker[] = "0c318c3035dc4ef7996dc6d40bbc80b5.s2.eu.hivemq.cloud";
 int        port     = 8883;
 const char topic[]  = "Christians arduino";
+const char topicRecived[]  = "Stop";
 
 const long interval = 1000;
 unsigned long previousMillis = 0;
@@ -39,10 +40,13 @@ String formattedDate = "";
 String dateTime = "";
 
 int status = WL_IDLE_STATUS;
-StaticJsonDocument<300> data;
 
 
 int GMT = 1; //gmt +1
+const size_t capacity = JSON_OBJECT_SIZE(10)+16;
+//array maalinger2 = [];
+StaticJsonDocument<capacity> data;
+//JsonObject data = rawData.to<JsonObject>();
 
 void setup() {
   pinMode(digitalPin,INPUT); 
@@ -95,9 +99,28 @@ void setup() {
 
     while (1);
   }
-
   Serial.println("You're connected to the MQTT broker!");
+  mqttClient.onMessage(onMqttMessage);
   Serial.println();
+  mqttClient.subscribe(topicRecived);
+}
+
+void onMqttMessage(int messageSize) {
+  // we received a message, print out the topic and contents
+  Serial.println("Received a message with topic '");
+  Serial.print(mqttClient.messageTopic());
+  Serial.print("', length ");
+  Serial.print(messageSize);
+  Serial.println(" bytes:");
+  // use the Stream interface to print the contents
+  while (mqttClient.available()) {
+    Serial.print((char)mqttClient.read());
+  }
+
+  //Serial.println();
+
+  Serial.println();
+
 }
 
 void maaler(){
@@ -114,18 +137,21 @@ void printTime() {
     formattedTime = timeClient.getFormattedTime().substring(0, 5); // Get the formatted time string and keep only the hours and minutes
 
     setTime(timeClient.getEpochTime()); // Set the internal time using the epoch time from the NTP client
-    formattedDate = String(day()) + "." + String(month()) + "." + String(year()); // Get the formatted date string using the TimeLib functions
+    formattedDate = print2digits(day()) + print2digits(month()) + String(year()); // Get the formatted date string using the TimeLib functions
   }
   
 
   delay(1000);
 }
 
-void print2digits(int number) {
+String print2digits(int number) {
+  String result;
   if (number < 10) {
-    Serial.print("0");
+    result = "0" + String(number);
+  }else {
+    result = String(number);
   }
-  Serial.print(number);
+  return result;
 }
 
 void mqttbesked(StaticJsonDocument<300> nydata){
@@ -143,10 +169,12 @@ void printWiFiStatus() {
 }
 
 void loop() {
-  JsonArray maalinger = data.createNestedArray("lydmaaling");
-  maalinger.add(analogVal);
+  //JsonArray maalinger = data.to<JsonArray>;
+  //maalinger.add(analogVal);
+  mqttClient.poll();
   data["id"] = count;
-  dateTime = formattedDate+" "+formattedTime;
+  dateTime = formattedDate+formattedTime;
+  data["maalinger"] = analogVal;
   data["tidspunkt"] = dateTime;
   Serial.println(); 
   Serial.println(formattedTime); 
