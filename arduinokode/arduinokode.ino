@@ -20,7 +20,7 @@ int analogPin = A5;   // KY-037 analog interface
 //int ledPin = 13;      // Arduino LED pin
 int digitalVal;       // digital readings
 int analogVal;     
-
+int startMillis;
 WiFiSSLClient wifiClient;
 MqttClient mqttClient(wifiClient);
 
@@ -28,30 +28,34 @@ const char broker[] = "0c318c3035dc4ef7996dc6d40bbc80b5.s2.eu.hivemq.cloud";
 int        port     = 8883;
 const char topic[]  = "Christians arduino";
 const char topicRecived[]  = "Stop";
+int tal = 50;
 
-const long interval = 1000;
+const long interval = 100000;
 unsigned long previousMillis = 0;
 
 int count = 0;
 MKRIoTCarrier carrier;
-int keyIndex = 0;                           // your network key Index number (needed only for WEP)
 String formattedTime = "";
 String formattedDate = "";
 String dateTime = "";
-
+uint32_t myCustomColor = carrier.leds.Color(255,100,50);
 int status = WL_IDLE_STATUS;
-
-
+int dataArray = 2000;
+int val[2000];
 int GMT = 1; //gmt +1
-const size_t capacity = JSON_OBJECT_SIZE(10)+16;
+const size_t capacity = JSON_ARRAY_SIZE(100) + 4 * JSON_OBJECT_SIZE(20)+20;
 //array maalinger2 = [];
 StaticJsonDocument<capacity> data;
-//JsonObject data = rawData.to<JsonObject>();
+//JsonArray mesurements = data.to<JsonArray>();
+//data.add("hello");
+//JsonObject dato = data["datetime"];
+
 
 void setup() {
   pinMode(digitalPin,INPUT); 
   pinMode(analogPin, INPUT);
   Serial.begin(9600);
+  startMillis = millis();
   while (!Serial) {
     ; // wait for serial port to connect. Needed for native USB port only
   }
@@ -64,7 +68,7 @@ void setup() {
     while (true);
 
   }
-  // attempt to connect to WiFi network:
+  Serial.println(".");// attempt to connect to WiFi network:
   Serial.print("Attempting to connect to WPA SSID: ");
   Serial.println(ssid);
   while (WiFi.begin(ssid, pass) != WL_CONNECTED) {
@@ -72,18 +76,20 @@ void setup() {
     Serial.print(".");
     delay(5000);
   }
-
+  carrier.withCase();
+  carrier.begin();
   Serial.println("You're connected to the network");
   Serial.println();
   printWiFiStatus();
 
   timeClient.begin();
+  timeClient.update();
   // Set time offset to your local timezone in seconds
   timeClient.setTimeOffset(3600);
-  /*String formattedTime = timeClient.getFormattedTime().substring(0, 5); // Get the formatted time string and keep only the hours and minutes
-  
-  String formattedDate = String(day()) + "." + String(month()) + "." + String(year()); // Get the formatted date string using the TimeLib functions
-  dateTime = formattedDate + " " + formattedTime;*/
+  formattedTime = timeClient.getFormattedTime().substring(0, 5); // Get the formatted time string and keep only the hours and minutes
+
+  setTime(timeClient.getEpochTime()); // Set the internal time using the epoch time from the NTP client
+  formattedDate = print2digits(day()) + "-" + print2digits(month()) + "-" + String(year());
   // Each client must have a unique client ID
   mqttClient.setId("ArduinoChr");
   // You can provide a username and password for authentication
@@ -126,7 +132,22 @@ void onMqttMessage(int messageSize) {
 void maaler(){
   digitalVal = digitalRead(digitalPin); 
   analogVal = analogRead(analogPin);
+JsonArray mesurements = data.createNestedArray("mesurements");
   //Serial.println(analogVal); 
+  if(analogVal > 80){
+    carrier.leds.fill(myCustomColor, 0, 5);
+
+    carrier.leds.show();
+  }
+  int plus;
+  for(int i=0; i <= dataArray; i++){
+    plus = val[i] + analogVal;
+    val[i] =+ plus;
+    int gennem = plus/dataArray;
+    mesurements.add(gennem);
+    plus = 0;
+  }
+  //Serial.println(dataArray);
 }
 
 void printTime() {
@@ -137,10 +158,8 @@ void printTime() {
     formattedTime = timeClient.getFormattedTime().substring(0, 5); // Get the formatted time string and keep only the hours and minutes
 
     setTime(timeClient.getEpochTime()); // Set the internal time using the epoch time from the NTP client
-    formattedDate = print2digits(day()) + print2digits(month()) + String(year()); // Get the formatted date string using the TimeLib functions
+    formattedDate = print2digits(day()) + "-" + print2digits(month()) + "-" + String(year()); // Get the formatted date string using the TimeLib functions
   }
-  
-
   delay(1000);
 }
 
@@ -154,7 +173,7 @@ String print2digits(int number) {
   return result;
 }
 
-void mqttbesked(StaticJsonDocument<300> nydata){
+void mqttbesked(){
   mqttClient.beginMessage(topic);
   serializeJsonPretty(data, mqttClient);
   mqttClient.endMessage();
@@ -168,26 +187,46 @@ void printWiFiStatus() {
   Serial.println(ip);
 }
 
-void loop() {
-  //JsonArray maalinger = data.to<JsonArray>;
-  //maalinger.add(analogVal);
-  mqttClient.poll();
-  data["id"] = count;
-  dateTime = formattedDate+formattedTime;
-  data["maalinger"] = analogVal;
-  data["tidspunkt"] = dateTime;
+void dataPrint(){
+  
+  //mesurements.remove(50);
+  
   Serial.println(); 
   Serial.println(formattedTime); 
   Serial.println(formattedDate); 
   Serial.println(dateTime); 
-  data["placering"] = "Christian";
   Serial.println(); 
   //mqttClient.poll();
   serializeJsonPretty(data, Serial);
-  unsigned long currentMillis = millis();
+  //delay(10000);
+}
+
+void loop() {
+  //JsonArray maalinger = data.to<JsonArray>;
+  //maalinger.add(analogVal);
+  data.clear();
+  data["id"] = count;
+  data["place"] = "Christian";
   
-  maaler();
+  dateTime = formattedDate + " " + formattedTime;
   printTime();
-  mqttbesked(data);
-  count++;
+  mqttClient.poll();
+  unsigned long currentMillis = millis();
+  data["datetime"] = dateTime;
+  maaler();
+  if(tal == 60){
+    
+  }
+  if (currentMillis - startMillis >= interval) {
+    
+    startMillis = currentMillis;
+    dataPrint();
+    //data.set("datetime", dateTime);
+    currentMillis = 0; 
+    tal = 0;
+    count++;
+  }
+  Serial.println(currentMillis);
+  tal++;
+  //mqttbesked();
 }
