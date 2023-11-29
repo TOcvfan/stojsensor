@@ -132,7 +132,7 @@ void onMqttMessage(int messageSize) {
 void maaler(){
   digitalVal = digitalRead(digitalPin); 
   analogVal = analogRead(analogPin);
-JsonArray mesurements = data.createNestedArray("mesurements");
+  JsonArray mesurements = data.createNestedArray("mesurements");
   //Serial.println(analogVal); 
   if(analogVal > 80){
     carrier.leds.fill(myCustomColor, 0, 5);
